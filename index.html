@@ -70,9 +70,10 @@
        <label class="sr-only" for="search-input">Search</label>
        <input type="search" class="dock__search" id="search-input" placeholder="Search" autocomplete="off" />
      </div>
-     <button type="button" class="dock__btn dock__btn--icon" id="btn-edit" aria-label="Edit pin or search" title="Edit focused pin / search">
-       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-         <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+     <button type="button" class="dock__btn dock__btn--icon" id="btn-tag" aria-label="Browse tags" title="Browse tags">
+       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+         <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+         <line x1="7" y1="7" x2="7.01" y2="7"/>
        </svg>
      </button>
      <button type="button" class="dock__btn dock__btn--accent" id="btn-add" aria-label="Add image">
@@ -215,6 +216,28 @@
    </div>
  </div>
 
+ <!-- Tag browser modal -->
+ <div class="tag-browser-backdrop" id="tag-browser" hidden>
+   <div class="tag-browser__panel" role="dialog" aria-labelledby="tag-browser-title">
+     <div class="tag-browser__header">
+       <h2 class="tag-browser__title" id="tag-browser-title">tags</h2>
+       <button type="button" class="tag-browser__close" id="tag-browser-close" aria-label="Close">×</button>
+     </div>
+     <div class="tag-browser__search-wrap">
+       <input type="search" class="tag-browser__search" id="tag-browser-search" placeholder="Search tags…" autocomplete="off" />
+     </div>
+     <div class="tag-browser__list" id="tag-browser-list" aria-label="Tags"></div>
+   </div>
+ </div>
+
+ <!-- Radial blur SVG filter (cursor-based, applied via JS) -->
+ <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+   <defs>
+     <filter id="radial-blur-filter" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+       <feGaussianBlur stdDeviation="0 0" result="blur"/>
+     </filter>
+   </defs>
+ </svg>
  <canvas id="analyze-canvas" class="sr-only" width="32" height="32" aria-hidden="true"></canvas>
  <script src="app.js"></script>
 </body>

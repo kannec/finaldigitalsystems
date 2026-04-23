@@ -1347,11 +1347,11 @@
  }
 
 
- const FOLDER_CARD_W = 200;
+ const FOLDER_CARD_W = 280;
  const FOLDER_VISUAL_H = (FOLDER_CARD_W * 4) / 3;
  const FOLDER_CELL_H = FOLDER_VISUAL_H + 12 + 40;
- const FOLDER_GAP_X = 36;
- const FOLDER_GAP_Y = 44;
+ const FOLDER_GAP_X = 44;
+ const FOLDER_GAP_Y = 52;
 
 
  function folderGridColumnCount(n) {
@@ -1393,23 +1393,39 @@
    const col = folder.color || folderColorFor(folder.name, folder.id);
    btn.style.setProperty("--folder-accent-label", col);
 
-
    const visual = document.createElement("div");
    visual.className = "folder-card__visual";
 
+   // Collect up to 4 most recent pin srcs (pinIds are stored oldest-first, reverse for recency)
+   const recentPinIds = [...(folder.pinIds || [])].reverse().slice(0, 4);
+   const coverSrcs = recentPinIds
+     .map((pid) => pins.find((x) => x.id === pid))
+     .filter(Boolean)
+     .map((p) => p.src);
 
-   let coverSrc = null;
-   if (folder.pinIds && folder.pinIds.length) {
-     const pid = folder.pinIds[0];
-     const p = pins.find((x) => x.id === pid);
-     if (p) coverSrc = p.src;
-   }
-
-
-   if (coverSrc) {
+   if (coverSrcs.length >= 2) {
+     // 2x2 grid
+     const grid = document.createElement("div");
+     grid.className = "folder-card__grid";
+     for (let i = 0; i < 4; i++) {
+       const cell = document.createElement("div");
+       cell.className = "folder-card__grid-cell";
+       if (coverSrcs[i]) {
+         const img = document.createElement("img");
+         img.className = "folder-card__grid-img";
+         img.src = coverSrcs[i];
+         img.alt = "";
+         cell.appendChild(img);
+       } else {
+         cell.style.background = `${col}33`;
+       }
+       grid.appendChild(cell);
+     }
+     visual.appendChild(grid);
+   } else if (coverSrcs.length === 1) {
      const img = document.createElement("img");
      img.className = "folder-card__img";
-     img.src = coverSrc;
+     img.src = coverSrcs[0];
      img.alt = "";
      visual.appendChild(img);
    } else {
@@ -1419,40 +1435,32 @@
      visual.appendChild(ph);
    }
 
-
    const glass = document.createElement("div");
    glass.className = "folder-card__glass";
    visual.appendChild(glass);
 
-
    const meta = document.createElement("div");
    meta.className = "folder-card__meta";
-
 
    const sw = document.createElement("span");
    sw.className = "folder-card__swatch";
    sw.style.background = col;
 
-
    const nameEl = document.createElement("span");
    nameEl.className = "folder-card__name";
    nameEl.textContent = (folder.name || "untitled").toLowerCase();
-
 
    const time = document.createElement("time");
    time.className = "folder-card__time";
    time.textContent = formatTimeAgo(folder.updatedAt);
    time.dateTime = new Date(folder.updatedAt || Date.now()).toISOString();
 
-
    meta.appendChild(sw);
    meta.appendChild(nameEl);
    meta.appendChild(time);
 
-
    btn.appendChild(visual);
    btn.appendChild(meta);
-
 
    btn.addEventListener("click", () => openFolderFromLibrary(folder.id));
    return btn;
@@ -1865,14 +1873,9 @@
  el("btn-select").addEventListener("click", () => setSelectMode(!selectMode));
 
 
- el("btn-edit").addEventListener("click", () => {
-   if (focusedPinId) {
-     const pin = pins.find((p) => p.id === focusedPinId);
-     if (pin) openTagging({ editingPin: pin });
-     return;
-   }
-   searchInput.focus();
-   searchInput.select();
+ el("btn-tag").addEventListener("click", (e) => {
+   e.stopPropagation();
+   toggleTagBrowser();
  });
 
 
@@ -1912,4 +1915,146 @@
  /* first paint chips */
  tier1Chips.replaceChildren();
  tier2Chips.replaceChildren();
+
+ /* ── Cmd+\ toolbar hide/show ───────────────────────────── */
+ let uiHidden = false;
+ document.addEventListener("keydown", (e) => {
+   if ((e.metaKey || e.ctrlKey) && e.key === "\\") {
+     e.preventDefault();
+     uiHidden = !uiHidden;
+     document.body.classList.toggle("ui-hidden", uiHidden);
+   }
+ });
+
+ /* ── Tag browser ────────────────────────────────────────── */
+ const tagBrowser = el("tag-browser");
+ const tagBrowserSearch = el("tag-browser-search");
+ const tagBrowserList = el("tag-browser-list");
+
+ function getAllTags() {
+   const freq = new Map();
+   for (const pin of pins) {
+     for (const t of (pin.tags || [])) {
+       freq.set(t, (freq.get(t) || 0) + 1);
+     }
+   }
+   // Sort by most recent pin that has this tag, then frequency
+   const tagRecency = new Map();
+   for (const pin of [...pins].sort((a,b) => (b.savedAt||0)-(a.savedAt||0))) {
+     for (const t of (pin.tags||[])) {
+       if (!tagRecency.has(t)) tagRecency.set(t, pin.savedAt||0);
+     }
+   }
+   return [...freq.entries()]
+     .sort((a, b) => (tagRecency.get(b[0])||0) - (tagRecency.get(a[0])||0))
+     .map(([tag, count]) => ({ tag, count }));
+ }
+
+ function renderTagBrowserList(query) {
+   const all = getAllTags();
+   const q = (query || "").toLowerCase().trim();
+   const filtered = q ? all.filter(({tag}) => tag.includes(q)) : all;
+   tagBrowserList.replaceChildren();
+   if (!filtered.length) {
+     const empty = document.createElement("p");
+     empty.className = "tag-browser__empty";
+     empty.textContent = q ? "no tags match" : "no tags yet";
+     tagBrowserList.appendChild(empty);
+     return;
+   }
+   for (const {tag, count} of filtered) {
+     const btn = document.createElement("button");
+     btn.type = "button";
+     btn.className = "tag-browser__tag" + chipCategoryClass(tag);
+     const nameEl = document.createElement("span");
+     nameEl.className = "tag-browser__tag-name";
+     nameEl.textContent = tag;
+     const countEl = document.createElement("span");
+     countEl.className = "tag-browser__tag-count";
+     countEl.textContent = count;
+     btn.appendChild(nameEl);
+     btn.appendChild(countEl);
+     btn.addEventListener("click", () => {
+       closeTagBrowser();
+       searchInput.value = tag;
+       searchQuery = tag;
+       focusedPinId = null;
+       applyPinLayout();
+     });
+     tagBrowserList.appendChild(btn);
+   }
+ }
+
+ function openTagBrowser() {
+   tagBrowserSearch.value = "";
+   renderTagBrowserList("");
+   tagBrowser.hidden = false;
+   tagBrowserSearch.focus();
+ }
+
+ function closeTagBrowser() {
+   tagBrowser.hidden = true;
+ }
+
+ function toggleTagBrowser() {
+   tagBrowser.hidden ? openTagBrowser() : closeTagBrowser();
+ }
+
+ el("tag-browser-close").addEventListener("click", closeTagBrowser);
+ tagBrowserSearch.addEventListener("input", () => {
+   renderTagBrowserList(tagBrowserSearch.value);
+ });
+ tagBrowser.addEventListener("click", (e) => {
+   if (e.target === tagBrowser) closeTagBrowser();
+ });
+ document.addEventListener("keydown", (e) => {
+   if (e.key === "Escape" && !tagBrowser.hidden) {
+     closeTagBrowser();
+   }
+ });
+
+ /* ── Radial blur from cursor ──────────────────────────────── */
+ // We use a CSS SVG filter on the pins layer with a mask that grows
+ // blur with distance from cursor. We use a canvas-based approach
+ // drawing multiple concentric blur zones using CSS + JS.
+ let cursorX = window.innerWidth / 2;
+ let cursorY = window.innerHeight / 2;
+ let radialBlurRaf = null;
+
+ function updateRadialBlur() {
+   // We apply variable blur to each pin based on distance from cursor
+   const viewRect = viewport.getBoundingClientRect();
+   const cx = cursorX - viewRect.left;
+   const cy = cursorY - viewRect.top;
+   const maxDist = Math.hypot(viewRect.width, viewRect.height) * 0.72;
+
+   const pins2 = pinsLayer.querySelectorAll(".pin");
+   pins2.forEach((node) => {
+     const r = node.getBoundingClientRect();
+     const px = r.left + r.width / 2 - viewRect.left;
+     const py = r.top + r.height / 2 - viewRect.top;
+     const dist = Math.hypot(px - cx, py - cy);
+     const t = Math.min(dist / maxDist, 1); // 0 = at cursor, 1 = far away
+     // gentle: max blur ~2.8px at the far edge
+     const blur = t * t * 2.8;
+     if (blur < 0.08) {
+       node.style.filter = "";
+     } else {
+       node.style.filter = `blur(${blur.toFixed(2)}px)`;
+     }
+   });
+   radialBlurRaf = null;
+ }
+
+ document.addEventListener("mousemove", (e) => {
+   cursorX = e.clientX;
+   cursorY = e.clientY;
+   if (!radialBlurRaf) {
+     radialBlurRaf = requestAnimationFrame(updateRadialBlur);
+   }
+ });
+
+ // Init blur
+ requestAnimationFrame(updateRadialBlur);
+
 })();
